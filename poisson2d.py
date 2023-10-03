@@ -1,8 +1,10 @@
 import numpy as np
 import sympy as sp
 import scipy.sparse as sparse
+from scipy.interpolate import interpn
 
-x, y = sp.symbols('x,y')
+x, y = sp.symbols("x,y")
+
 
 class Poisson2D:
     r"""Solve Poisson's equation in 2D::
@@ -15,7 +17,7 @@ class Poisson2D:
 
     """
 
-    def __init__(self, L, ue):
+    def __init__(self, L: float, ue) -> None:
         """Initialize Poisson solver for the method of manufactured solutions
 
         Parameters
@@ -28,33 +30,68 @@ class Poisson2D:
         """
         self.L = L
         self.ue = ue
-        self.f = sp.diff(self.ue, x, 2)+sp.diff(self.ue, y, 2)
+        self.f = sp.diff(self.ue, x, 2) + sp.diff(self.ue, y, 2)
 
-    def create_mesh(self, N):
+    # Done
+    def create_mesh(self, N: int) -> None:
         """Create 2D mesh and store in self.xij and self.yij"""
-        # self.xij, self.yij ...
-        raise NotImplementedError
+        x = np.linspace(0, self.L, N + 1)
+        y = np.linspace(0, self.L, N + 1)
+        self.xij, self.yij = np.meshgrid(x, y, indexing="ij")
 
-    def D2(self):
+    # Done
+    def D2(self) -> sparse._lil.lil_matrix:
         """Return second order differentiation matrix"""
-        raise NotImplementedError
+        D = sparse.diags([1, -2, 1], [-1, 0, 1], (self.N + 1, self.N + 1), "lil")
+        D[0, :4] = 2, -5, 4, -1
+        D[-1, -4:] = -1, 4, -5, 2
+        return D
 
-    def laplace(self):
+    # Done
+    def laplace(self) -> sparse._csr.csr_matrix:
         """Return vectorized Laplace operator"""
-        raise NotImplementedError
+        D2x = (1.0 / self.dx**2) * self.D2()
+        D2y = (1.0 / self.dy**2) * self.D2()
+        laplace = sparse.kron(D2x, sparse.eye(self.N + 1)) + sparse.kron(
+            sparse.eye(self.N + 1), D2y
+        )
+        return laplace
 
-    def get_boundary_indices(self):
+    # Done
+    def get_boundary_indices(self) -> np.array:
         """Return indices of vectorized matrix that belongs to the boundary"""
-        raise NotImplementedError
+        B = np.ones((self.N + 1, self.N + 1), dtype=bool)
+        B[1:-1, 1:-1] = 0
+        return np.where(B.ravel() == 1)[0]
 
-    def assemble(self):
+    # Done
+    def assemble(self) -> [sparse._csr.csr_matrix, np.array]:
         """Return assembled matrix A and right hand side vector b"""
         # return A, b
-        raise NotImplementedError
+        A = self.laplace()
+        F = sp.lambdify((x, y), self.f)(self.xij, self.yij)
+        u_exact = sp.lambdify((x, y), self.ue)(self.xij, self.yij).ravel()
 
-    def l2_error(self, u):
+        boundary = self.get_boundary_indices()
+        b = F.flatten()
+        b[boundary] = u_exact[boundary]
+
+        # print(A.shape, (self.N + 1) * (self.N + 1))
+        A = A.tolil()
+        for i in boundary:
+            A[i] = 0
+            # print(boundary_data[i])
+            A[i, i] = 1
+
+        A = A.tocsr()
+        return A, b
+
+    # Done
+    def l2_error(self, u: np.array) -> float:
         """Return l2-error norm"""
-        raise NotImplementedError
+        # U = np.reshape(u, (self.N + 1, self.N + 1))
+        u_exact = sp.lambdify((x, y), self.ue)(self.xij, self.yij)
+        return np.sqrt(self.dx * self.dy * np.sum((u - u_exact) ** 2))
 
     def __call__(self, N):
         """Solve Poisson's equation.
@@ -69,12 +106,14 @@ class Poisson2D:
         The solution as a Numpy array
 
         """
+        self.N = N
+        self.dx = self.dy = self.h = self.L / N
         self.create_mesh(N)
         A, b = self.assemble()
-        self.U = sparse.linalg.spsolve(A, b.flatten()).reshape((N+1, N+1))
+        self.U = sparse.linalg.spsolve(A, b.flatten()).reshape((N + 1, N + 1))
         return self.U
 
-    def convergence_rates(self, m=6):
+    def convergence_rates(self, m: int = 6) -> [list, np.array, np.array]:
         """Compute convergence rates for a range of discretizations
 
         Parameters
@@ -97,7 +136,11 @@ class Poisson2D:
             E.append(self.l2_error(u))
             h.append(self.h)
             N0 *= 2
-        r = [np.log(E[i-1]/E[i])/np.log(h[i-1]/h[i]) for i in range(1, m+1, 1)]
+        r = [
+            np.log(E[i - 1] / E[i]) / np.log(h[i - 1] / h[i])
+            for i in range(1, m + 1, 1)
+        ]
+        # print(E, h)
         return r, np.array(E), np.array(h)
 
     def eval(self, x, y):
@@ -113,19 +156,43 @@ class Poisson2D:
         The value of u(x, y)
 
         """
-        raise NotImplementedError
+        # f = interpolate.interp2d(self.xij, self.yij, self.U, kind="cubic")
+        x_c = int(x / self.dx)
+        y_c = int(y / self.dy)
+
+        res = interpn(
+            (self.xij, self.yij),
+            self.U,
+            np.array([x, y]),
+            method="linear",
+        )
+
+        return res
+
 
 def test_convergence_poisson2d():
     # This exact solution is NOT zero on the entire boundary
-    ue = sp.exp(sp.cos(4*sp.pi*x)*sp.sin(2*sp.pi*y))
+    ue = sp.exp(sp.cos(4 * sp.pi * x) * sp.sin(2 * sp.pi * y))
     sol = Poisson2D(1, ue)
     r, E, h = sol.convergence_rates()
-    assert abs(r[-1]-2) < 1e-2
+    assert abs(r[-1] - 2) < 1e-2
+
 
 def test_interpolation():
-    ue = sp.exp(sp.cos(4*sp.pi*x)*sp.sin(2*sp.pi*y))
+    ue = sp.exp(sp.cos(4 * sp.pi * x) * sp.sin(2 * sp.pi * y))
     sol = Poisson2D(1, ue)
     U = sol(100)
     assert abs(sol.eval(0.52, 0.63) - ue.subs({x: 0.52, y: 0.63}).n()) < 1e-3
-    assert abs(sol.eval(sol.h/2, 1-sol.h/2) - ue.subs({x: sol.h, y: 1-sol.h/2}).n()) < 1e-3
+    print(sol.eval(sol.h / 2, 1 - sol.h / 2), ue.subs({x: sol.h, y: 1 - sol.h / 2}).n())
+    assert (
+        abs(
+            sol.eval(sol.h / 2, 1 - sol.h / 2)
+            - ue.subs({x: sol.h, y: 1 - sol.h / 2}).n()
+        )
+        < 1e-3
+    )
 
+
+if __name__ == "__main__":
+    # test_convergence_poisson2d()
+    test_interpolation()

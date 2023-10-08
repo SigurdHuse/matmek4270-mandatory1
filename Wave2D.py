@@ -235,7 +235,7 @@ def create_movie():
 
 
 if __name__ == "__main__":
-    # test_convergence_wave2d()
-    # test_convergence_wave2d_neumann()
-    # test_exact_wave2d()
+    test_convergence_wave2d()
+    test_convergence_wave2d_neumann()
+    test_exact_wave2d()
     create_movie()

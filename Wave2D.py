@@ -3,6 +3,7 @@ import sympy as sp
 import scipy.sparse as sparse
 import matplotlib.pyplot as plt
 from matplotlib import cm
+import matplotlib.animation as animation
 
 x, y, t = sp.symbols("x,y,t")
 
@@ -132,14 +133,14 @@ class Wave2D:
             self.Unm1[:] = self.Un
             self.Un[:] = self.Unp1
             if store_data != -1 and n % store_data == 0:
-                self.plotdata[self.dt * (n + 1)] = self.Un.copy()
+                self.plot_data[self.dt * (n + 1)] = self.Un.copy()
 
             err.append(self.l2_error(self.Un, self.dt * (n + 1)))
 
         if store_data == -1:
             return self.h, err[:]
         else:
-            return self.plotdata
+            return self.plot_data
 
     def convergence_rates(self, m=4, cfl=0.1, Nt=10, mx=3, my=3):
         """Compute convergence rates for a range of discretizations
@@ -217,10 +218,24 @@ def test_exact_wave2d():
 
 
 def create_movie():
-    pass
+    solN = Wave2D_Neumann()
+    data = solN(N=100, Nt=100, cfl=1 / np.sqrt(2), mx=2, my=2, store_data=2)
+    xij, yij = solN.xij, solN.yij
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    frames = []
+
+    for n, val in data.items():
+        frame = ax.plot_wireframe(xij, yij, val, rstride=2, cstride=2)
+        frames.append([frame])
+
+    ani = animation.ArtistAnimation(
+        fig, frames, interval=400, blit=True, repeat_delay=1000
+    )
+    ani.save("report/neumannwave.gif", writer="pillow", fps=5)
 
 
 if __name__ == "__main__":
-    test_convergence_wave2d()
-    test_convergence_wave2d_neumann()
-    test_exact_wave2d()
+    # test_convergence_wave2d()
+    # test_convergence_wave2d_neumann()
+    # test_exact_wave2d()
+    create_movie()

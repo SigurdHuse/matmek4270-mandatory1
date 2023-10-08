@@ -156,18 +156,16 @@ class Poisson2D:
         The value of u(x, y)
 
         """
-        # f = interpolate.interp2d(self.xij, self.yij, self.U, kind="cubic")
-        x_c = int(x / self.dx)
-        y_c = int(y / self.dy)
 
-        res = interpn(
-            (self.xij, self.yij),
-            self.U,
-            np.array([x, y]),
-            method="linear",
-        )
+        nx = int(x // self.h)
+        ny = int(y // self.h)
+        dx = (x - nx * self.h) / self.h
+        dy = (y - ny * self.h) / self.h
 
-        return res
+        ans = (1 - dx) * (1 - dy) * self.U[nx, ny] + dx * (1 - dy) * self.U[nx + 1, ny]
+        ans += (1 - dx) * dy * self.U[nx, ny + 1] + dx * dy * self.U[nx + 1, ny + 1]
+
+        return ans
 
 
 def test_convergence_poisson2d():
@@ -183,7 +181,6 @@ def test_interpolation():
     sol = Poisson2D(1, ue)
     U = sol(100)
     assert abs(sol.eval(0.52, 0.63) - ue.subs({x: 0.52, y: 0.63}).n()) < 1e-3
-    print(sol.eval(sol.h / 2, 1 - sol.h / 2), ue.subs({x: sol.h, y: 1 - sol.h / 2}).n())
     assert (
         abs(
             sol.eval(sol.h / 2, 1 - sol.h / 2)
@@ -195,4 +192,4 @@ def test_interpolation():
 
 if __name__ == "__main__":
     test_convergence_poisson2d()
-    # test_interpolation()
+    test_interpolation()

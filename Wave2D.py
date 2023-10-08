@@ -24,9 +24,7 @@ class Wave2D:
     @property
     def w(self):
         """Return the dispersion coefficient"""
-        return np.sqrt(
-            (self.c**2) * ((np.pi * self.mx) ** 2 + (np.pi * self.my) ** 2)
-        )
+        return self.c * np.sqrt(((np.pi * self.mx) ** 2 + (np.pi * self.my) ** 2))
 
     def ue(self, mx, my):
         """Return the exact standing wave"""
@@ -207,9 +205,22 @@ def test_convergence_wave2d_neumann():
 
 
 def test_exact_wave2d():
-    raise NotImplementedError
+    mx = my = 3
+    cfl = 1 / np.sqrt(2)
+    sol = Wave2D()
+    solN = Wave2D_Neumann()
+
+    _, err1 = sol(N=4000, Nt=50, cfl=cfl, mx=mx, my=my)
+    _, err2 = solN(N=4000, Nt=50, cfl=cfl, mx=mx, my=my)
+    assert err1[-1] < 1e-15
+    assert err2[-1] < 1e-15
+
+
+def create_movie():
+    pass
 
 
 if __name__ == "__main__":
     test_convergence_wave2d()
     test_convergence_wave2d_neumann()
+    test_exact_wave2d()
